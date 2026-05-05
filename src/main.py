@@ -5,6 +5,10 @@ from src.database import async_engine, Base, async_session_maker
 from src.seed import create_default_achievements
 import uvicorn
 from fastapi import FastAPI
+from src.routers.users import router as users_router
+from src.routers.map import router as map_router
+from src.routers.feed import router as feed_router
+from src.routers.events import router as events_router
 
 
 @asynccontextmanager
@@ -33,6 +37,10 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+app.include_router(users_router)
+app.include_router(map_router)
+app.include_router(feed_router)
+app.include_router(events_router)
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)

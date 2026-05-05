@@ -18,6 +18,15 @@ class EventBase(BaseModel):
     tags: Optional[List[str]] = None
 
 
+class EventFilter(BaseModel):
+    """Фильтры для календаря событий"""
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    is_online: Optional[bool] = None
+    tag: Optional[str] = None
+    status: Optional[EventStatus] = None
+
+
 class EventCreate(EventBase):
     """Создание нового мероприятия"""
 
@@ -41,16 +50,18 @@ class EventCreate(EventBase):
 
 
 class EventRead(EventBase):
-    """Мероприятие для отображения в календаре и ленте"""
+    """Событие для отображения в календаре и общем списке"""
     id: int
     organizer_id: int
     organizer_name: str
     organizer_role: str
+    status: EventStatus = EventStatus.ACTIVE
+
     applicants_count: int = 0
     participants_count: int = 0
-    created_at: datetime
     is_user_applicant: bool = False
-    has_user_confirmed: bool = False
+
+    created_at: datetime
 
     class Config:
         from_attributes = True
@@ -102,11 +113,25 @@ class EventParticipantCreate(BaseModel):
 
 
 class EventParticipantRead(BaseModel):
-    """Информация о участнике"""
+    """Публичная информация об участнике (для всех пользователей)"""
     user_id: int
     user_name: str
-    confirmed_at: datetime
-    proof_photo_url: str
+    registered_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class EventParticipantDetail(BaseModel):
+    """Полная информация об участнике (для модератора и организатора)"""
+    user_id: int
+    user_name: str
+    registered_at: datetime
+    proof_photo_url: str                    # только для модерации
+    comment: Optional[str] = None
+    confirmed_at: Optional[datetime] = None
+    is_moderated: bool = False
+    moderated_by: Optional[int] = None
 
     class Config:
         from_attributes = True

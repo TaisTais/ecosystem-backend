@@ -14,6 +14,15 @@ class EcoPointBase(BaseModel):
     type: EcoPointCategory
 
 
+class EcoPointFilter(BaseModel):
+    """Фильтры для карты (Use Case: просмотр точек на карте)"""
+    type: Optional[EcoPointCategory] = None
+    min_latitude: Optional[float] = None
+    max_latitude: Optional[float] = None
+    min_longitude: Optional[float] = None
+    max_longitude: Optional[float] = None
+
+
 class EcoPointCreate(EcoPointBase):
     """Создание новой точки (пользователем или организацией)"""
     description: Optional[str] = None
@@ -49,7 +58,7 @@ class EcoPointUpdate(BaseModel):
     type: Optional[EcoPointCategory] = None
 
 
-class EcoPointStatusUpdate(BaseModel):
+class EcoPointStatusCreate(BaseModel):
     """Пользователь ставит статус точки (работает / закрыто)"""
     status: PointStatus
 

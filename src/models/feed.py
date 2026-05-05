@@ -26,7 +26,7 @@ class Post(Base):
     title: Mapped[Optional[str]] = mapped_column(String(200))
     content: Mapped[str] = mapped_column(Text)
     image_url: Mapped[Optional[str]] = mapped_column(String(500))
-    tags: Mapped[Optional[str]] = mapped_column(String(150))  # "переработка", "субботник"...
+    tags: Mapped[Optional[str]] = mapped_column(String(500))
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now(timezone.utc))
     is_published: Mapped[bool] = mapped_column(Boolean, default=True)

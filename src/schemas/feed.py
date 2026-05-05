@@ -2,7 +2,7 @@ from pydantic import BaseModel, field_validator
 from typing import Optional, List
 from datetime import datetime
 
-from src.models.feed import PostType  # Импортируем Enum из моделей
+from src.models.feed import PostType
 
 
 class PostBase(BaseModel):
@@ -10,7 +10,14 @@ class PostBase(BaseModel):
     title: Optional[str] = None
     content: str
     image_url: Optional[str] = None
-    tags: Optional[List[str]] = None   # например: ["субботник", "переработка"]
+    tags: Optional[List[str]] = None
+
+
+class PostFilter(BaseModel):
+    """Фильтры для ленты постов"""
+    post_type: Optional[PostType] = None
+    tag: Optional[str] = None
+    author_id: Optional[int] = None
 
 
 class PostCreate(PostBase):
@@ -24,17 +31,13 @@ class PostCreate(PostBase):
         return v
 
 
-class PostRead(BaseModel):
-    """Основная схема для ленты"""
+class PostRead(PostBase):
+    """Пост для отображения в ленте"""
     id: int
     author_id: int
     author_name: str
     author_role: str
     post_type: PostType
-    title: Optional[str] = None
-    content: str                    # полный текст
-    image_url: Optional[str] = None
-    tags: Optional[List[str]] = None
     created_at: datetime
     is_published: bool = True
     likes_count: int = 0

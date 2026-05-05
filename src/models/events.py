@@ -28,7 +28,7 @@ class Event(Base):
     end_datetime: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     status: Mapped[EventStatus] = mapped_column(SQLEnum(EventStatus), nullable=False, default=EventStatus.ACTIVE, index=True)
     max_participants: Mapped[Optional[int]] = mapped_column(Integer)
-    tags: Mapped[Optional[str]] = mapped_column(String(300))
+    tags: Mapped[Optional[str]] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now(timezone.utc))
 
     # Связи
