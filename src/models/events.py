@@ -1,12 +1,16 @@
 import enum
-from sqlalchemy import String, Integer, DateTime, ForeignKey, Text, Boolean
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import String, Integer, DateTime, ForeignKey, Text, Boolean, and_, literal_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship, foreign, remote
 from typing import Optional, List
 from datetime import datetime, timezone
 from sqlalchemy import Enum as SQLEnum
 from src.database import Base
-from src.models.complaints import Complaint
-from src.models.users import User
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.models.complaints import Complaint
+    from src.models.users import User
 
 
 class EventStatus(str, enum.Enum):
@@ -50,12 +54,12 @@ class Event(Base):
         cascade="all, delete-orphan",
         lazy="selectin"
     )
-    complaints: Mapped[List["Complaint"]] = relationship(
+    complaints: Mapped[list["Complaint"]] = relationship(
         "Complaint",
-        foreign_keys="[Complaint.target_id]",
-        primaryjoin="and_(Complaint.target_id == Event.id, Complaint.target_type == 'event')",
+        primaryjoin="and_(Event.id == foreign(Complaint.target_id), Complaint.target_type == 'event')",
+        lazy="selectin",
+        viewonly=True,
         back_populates="events",
-        lazy="selectin"
     )
 
     @property
@@ -80,6 +84,7 @@ class EventApplicant(Base):
     )
     applicant: Mapped["User"] = relationship(
         "User",
+        back_populates="applied_events"
     )
 
 
@@ -99,7 +104,8 @@ class EventParticipant(Base):
         back_populates="participants"
     )
     participant: Mapped["User"] = relationship(
-        "User"
+        "User",
+        back_populates="participated_events"
     )
 
 

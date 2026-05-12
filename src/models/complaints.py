@@ -1,14 +1,17 @@
-from sqlalchemy import Integer, DateTime, ForeignKey, Text
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import Integer, DateTime, ForeignKey, Text, and_, literal_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship, foreign, remote
 import enum
 from sqlalchemy import Enum as SQLEnum
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from datetime import datetime
 
 from src.database import Base
-from src.models.events import Event
 from src.models.feed import Post
-from src.models.users import User
+
+if TYPE_CHECKING:
+    from src.models.events import Event
+    from src.models.users import User
+    from src.models.feed import Post
 
 
 class TargetType(str, enum.Enum):
@@ -47,21 +50,26 @@ class Complaint(Base):
         "User",
         foreign_keys=[moderator_id]
     )
-    users: Mapped[Optional["Post"]] = relationship(
+    users: Mapped[Optional["User"]] = relationship(
         "User",
-        primaryjoin="and_(Complaint.target_id == User.id, Complaint.target_type == 'user')",
+        primaryjoin="and_(User.id == foreign(Complaint.target_id), Complaint.target_type == 'user')",
         back_populates="complaints_received",
-        uselist=False
+        uselist=False,
+        viewonly=True,
     )
+
     posts: Mapped[Optional["Post"]] = relationship(
         "Post",
-        primaryjoin="and_(Complaint.target_id == Post.id, Complaint.target_type == 'post')",
+        primaryjoin="and_(Post.id == foreign(Complaint.target_id), Complaint.target_type == 'post')",
         back_populates="complaints",
-        uselist=False
+        uselist=False,
+        viewonly=True
     )
+
     events: Mapped[Optional["Event"]] = relationship(
         "Event",
-        primaryjoin="and_(Complaint.target_id == Event.id, Complaint.target_type == 'event')",
+        primaryjoin="and_(Event.id == foreign(Complaint.target_id), Complaint.target_type == 'event')",
         back_populates="complaints",
-        uselist=False
+        uselist=False,
+        viewonly=True,
     )

@@ -5,7 +5,6 @@ from typing import Optional
 from datetime import datetime
 from sqlalchemy import Enum as SQLEnum
 from src.database import Base
-from src.models.users import User
 
 
 class ActionType(str, enum.Enum):
@@ -49,8 +48,10 @@ class UserAchievement(Base):
     """Достижения пользователей"""
     __tablename__ = "user_achievement"
 
-    user_id: Mapped[int] = mapped_column(ForeignKey("user.id"), primary_key=True)
-    achievement_id: Mapped[int] = mapped_column(ForeignKey("achievement.id"), primary_key=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("user.id"), nullable=False)
+    achievement_id: Mapped[int] = mapped_column(ForeignKey("achievement.id"), nullable=False)
     achieved_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     # Связи
@@ -81,7 +82,7 @@ class ModerationRecord(Base):
     moderated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     # Связи
-    user: Mapped["User"] = relationship(
+    users: Mapped["User"] = relationship(
         "User",
         foreign_keys=[user_id]
     )

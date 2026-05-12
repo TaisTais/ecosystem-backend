@@ -2,12 +2,12 @@ from sqlalchemy import String, Integer, DateTime, ForeignKey, Text, Boolean, Uni
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 import enum
 from sqlalchemy import Enum as SQLEnum
-from typing import Optional, List
+from typing import Optional, List, TYPE_CHECKING
 from datetime import datetime, timezone
 
 from src.database import Base
-from src.models.complaints import Complaint
-from src.models.users import User
+if TYPE_CHECKING:
+    from src.models.complaints import Complaint
 
 
 class PostType(str, enum.Enum):
@@ -38,9 +38,9 @@ class Post(Base):
         lazy="selectin"
     )
     comments: Mapped[List["PostComment"]] = relationship(
-        "Comment",
+        "PostComment",
         back_populates="post",
-        cascade="all, delete-orphan",  # при удалении поста удаляются комментарии
+        cascade="all, delete-orphan",
         lazy="selectin"
     )
     likes: Mapped[List["PostLike"]] = relationship(

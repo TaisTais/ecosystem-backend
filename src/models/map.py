@@ -6,7 +6,6 @@ from typing import Optional, List
 from datetime import datetime, timezone
 
 from src.database import Base
-from src.models.users import User
 
 
 class SourceType(str, enum.Enum):
@@ -129,11 +128,11 @@ class Visit(Base):
     proof_photo_url: Mapped[str] = mapped_column(String(500), nullable=True)
 
     # Связи
-    user: Mapped["User"] = relationship(
+    visiters: Mapped["User"] = relationship(
         "User",
         back_populates="visits"
     )
-    ecopoint: Mapped["EcoPoint"] = relationship(
+    point: Mapped["EcoPoint"] = relationship(
         "EcoPoint",
         back_populates="visits"
     )

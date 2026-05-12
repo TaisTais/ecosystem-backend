@@ -1,16 +1,18 @@
-from sqlalchemy import String, Integer, DateTime, Text
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import String, Integer, DateTime, Text, and_, func
+from sqlalchemy.orm import Mapped, mapped_column, relationship, foreign, remote
 import enum
 from sqlalchemy import Enum as SQLEnum
-from typing import Optional, List
+from typing import Optional, List, TYPE_CHECKING
 from datetime import datetime, timezone
 
 from src.database import Base
-from src.models.achievements import Achievement
-from src.models.complaints import Complaint
+from src.models.achievements import UserAchievement
 from src.models.events import Event, EventApplicant, EventParticipant
 from src.models.feed import Post
 from src.models.map import Status, Review, EcoPoint, Visit
+
+if TYPE_CHECKING:
+    from src.models.complaints import Complaint
 
 
 class UserRole(str, enum.Enum):
@@ -29,10 +31,14 @@ class User(Base):
     role: Mapped[UserRole] = mapped_column(SQLEnum(UserRole), nullable=False, default=UserRole.CITIZEN, index=True)
 
     # Общие поля
+    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     is_blocked: Mapped[bool] = mapped_column(default=False)
     blocked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     block_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now()
+    )
 
     # Поля для обычных пользователей
     experience_points: Mapped[Optional[int]] = mapped_column(Integer, default=0)
@@ -72,12 +78,12 @@ class User(Base):
     )
     applied_events: Mapped[List["EventApplicant"]] = relationship(
         "EventApplicant",
-        back_populates="user",
+        back_populates="applicant",
         lazy="selectin"
     )
     participated_events: Mapped[List["EventParticipant"]] = relationship(
         "EventParticipant",
-        back_populates="user",
+        back_populates="participant",
         lazy="selectin"
     )
     visits: Mapped[List["Visit"]] = relationship(
@@ -86,10 +92,9 @@ class User(Base):
         cascade="all, delete-orphan",
         lazy="selectin"
     )
-    achievements: Mapped[List["Achievement"]] = relationship(
-        "Achievement",
-        secondary="user_achievement",
-        back_populates="users",
+    achievements: Mapped[List["UserAchievement"]] = relationship(
+        "UserAchievement",
+        back_populates="user",
         lazy="selectin"
     )
     complaints_made: Mapped[List["Complaint"]] = relationship(
@@ -98,10 +103,10 @@ class User(Base):
         back_populates="complainant",
         lazy="selectin"
     )
-    complaints_received: Mapped[List["Complaint"]] = relationship(
+    complaints_received: Mapped[list["Complaint"]] = relationship(
         "Complaint",
-        foreign_keys="[Complaint.target_id]",
-        primaryjoin="and_(Complaint.target_id == User.id, Complaint.target_type == 'user')",
+        primaryjoin="and_(User.id == foreign(Complaint.target_id), Complaint.target_type == 'user')",
         back_populates="users",
-        lazy="selectin"
+        lazy="selectin",
+        viewonly=True,
     )

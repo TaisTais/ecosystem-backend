@@ -16,6 +16,13 @@ class UserCreate(UserBase):
     password: str
     role: UserRole = UserRole.CITIZEN
 
+    @field_validator('password')
+    @classmethod
+    def validate_password(cls, v: str):
+        if len(v) < 8:
+            raise ValueError("Пароль должен содержать минимум 8 символов")
+        return v
+
     @field_validator('role')
     @classmethod
     def validate_role(cls, v: UserRole) -> UserRole:
@@ -25,14 +32,22 @@ class UserCreate(UserBase):
 
 
 class UserLogin(BaseModel):
-    """Схема для авторизации пользователей"""
+    """Авторизация (логин)"""
     email: EmailStr
     password: str
 
 
 class Token(BaseModel):
+    """Ответ сервера после успешного логина"""
     access_token: str
     token_type: str = "bearer"
+
+
+class TokenData(BaseModel):
+    """Данные, которые хранятся внутри JWT-токена"""
+    user_id: int
+    email: str
+    role: UserRole
 
 
 class UserRead(UserBase):
