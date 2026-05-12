@@ -59,13 +59,18 @@ class UserRead(UserBase):
     created_at: datetime
 
     class Config:
-        from_attributes = True   # позволяет работать с SQLAlchemy-моделями
+        from_attributes = True
 
 
 class UserUpdate(BaseModel):
-    """Схема для обновления профиля"""
+    """Обновление данных своего профиля"""
     name: Optional[str] = None
     email: Optional[EmailStr] = None
+    description: Optional[str] = None
+    password: Optional[str] = None          # новое поле
+
+    class Config:
+        from_attributes = True
 
 
 class ModeratorCreate(BaseModel):

@@ -10,22 +10,13 @@ from src.services.users import create_user, get_user_by_id, update_user
 router = APIRouter(prefix="/users", tags=["Пользователи"])
 
 
-@router.get("/me", response_model=UserRead)
+@router.get("/me", summary="Посмотреть данные своего аккаунта", response_model=UserRead)
 async def get_current_user_info(current_user: User = Depends(get_current_user)):
-    """Получить данные текущего пользователя"""
+    """Получить данные своего аккаунта (только авторизованным пользователям)"""
     return current_user
 
 
-@router.post("/", response_model=UserRead, status_code=status.HTTP_201_CREATED)
-async def register_user(
-    user_data: UserCreate,
-    session: AsyncSession = Depends(get_session)
-):
-    """Регистрация нового пользователя"""
-    return await create_user(session, user_data)
-
-
-@router.get("/{user_id}", response_model=UserRead)
+@router.get("/{user_id}", summary="Получить данные аккаунта по id", response_model=UserRead)
 async def get_user(
     user_id: int,
     session: AsyncSession = Depends(get_session)
@@ -34,12 +25,16 @@ async def get_user(
     return await get_user_by_id(session, user_id)
 
 
-@router.patch("/me", response_model=UserRead)
+@router.patch("/me", summary="Обновить данные своего аккаунта", response_model=UserRead)
 async def update_current_user(
     user_data: UserUpdate,
-    # current_user: User = Depends(get_current_user),  # позже
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
-    """Обновление своего профиля (пока без защиты)"""
-    # Пока для теста используем ID = 1
-    return await update_user(session, 1, user_data)
+    """Обновление своего профиля"""
+    if not user_data.model_fields_set:  # если ничего не передали
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Не передано ни одного поля для обновления"
+        )
+    return await update_user(session, current_user, user_data)

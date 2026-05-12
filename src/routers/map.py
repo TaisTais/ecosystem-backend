@@ -2,67 +2,51 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
+from src.core.dependencies import get_current_user, get_current_citizen
 from src.database import get_session
+from src.models import User
 from src.schemas.map import (
     EcoPointCreate,
     EcoPointRead,
-    EcoPointUpdate,
     EcoPointStatusCreate,
     EcoPointReviewCreate,
     EcoPointReviewRead,
-    EcoPointFilter,
+    EcoPointFilter, EcoPointListRead,
 )
 from src.services.map import (
     create_ecopoint,
-    get_ecopoints_with_filters,
-    get_ecopoint_by_id,
+    get_ecopoints,
+    get_ecopoint_detail,
 )
 
 router = APIRouter(prefix="/map", tags=["Карта"])
 
 
-@router.get("/", response_model=List[EcoPointRead])
-async def get_map_points(
-    filters: EcoPointFilter = Depends(),   # ← Важная строка!
-    limit: int = Query(800, ge=1, le=1500),  # разумный максимум
-    skip: int = Query(0, ge=0),
-    session: AsyncSession = Depends(get_session)
-):
-    """Просмотр эко-точек (с фильтрами)"""
-    return await get_ecopoints_with_filters(
-        session=session,
-        filters=filters,
-        skip=skip,
-        limit=limit
-    )
-
-
-@router.post("/", response_model=EcoPointRead, status_code=status.HTTP_201_CREATED)
-async def add_ecopoint(
+@router.post("/", summary="Создать эко-точку", response_model=EcoPointRead, status_code=status.HTTP_201_CREATED)
+async def r_create_ecopoint(
     data: EcoPointCreate,
-    session: AsyncSession = Depends(get_session),
-    # current_user: User = Depends(get_current_user)  # позже
-):
-    """Добавить новую эко-точку"""
-    # Пока используем ID = 1 для теста
-    return await create_ecopoint(session, data, current_user_id=1)
-
-
-@router.get("/{ecopoint_id}", response_model=EcoPointRead)
-async def get_ecopoint(
-    ecopoint_id: int,
+    current_user: User = Depends(get_current_citizen),
     session: AsyncSession = Depends(get_session)
 ):
-    """Получить одну точку"""
-    return await get_ecopoint_by_id(session, ecopoint_id)
+    """Создать точку (только житель)"""
+    return await create_ecopoint(session, data, current_user)
 
 
-@router.patch("/{ecopoint_id}/status")
-async def update_status(
-    ecopoint_id: int,
-    status_data: EcoPointStatusCreate,
+@router.get("/", summary="Получить список эко-точек с фильтрами", response_model=List[EcoPointListRead])
+async def r_get_ecopoints(
+    filters: EcoPointFilter = Depends(),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(200, ge=1, le=1000),
     session: AsyncSession = Depends(get_session)
 ):
-    """Поставить статус точки (работает / закрыто)"""
-    # Реализуем позже
-    return {"message": "Статус обновлён"}
+    """Получить все точки (без ограничений)"""
+    return await get_ecopoints(session, filters, skip, limit)
+
+
+@router.get("/{ecopoint_id}", summary="Получить эко-точку по id", response_model=EcoPointRead)
+async def r_get_ecopoint_detail(ecopoint_id: int, session: AsyncSession = Depends(get_session)
+):
+    """Получить одну точку (без ограничений)"""
+    return await get_ecopoint_detail(session, ecopoint_id)
+
+

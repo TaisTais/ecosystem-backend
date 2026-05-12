@@ -53,3 +53,15 @@ async def get_current_user(
             detail="Недействительный или истёкший токен",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+
+async def get_current_citizen(
+    current_user: User = Depends(get_current_user)
+) -> User:
+    """Проверка, что пользователь — именно Житель (Citizen)"""
+    if current_user.role != "citizen":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Данное действие доступно только жителям"
+        )
+    return current_user

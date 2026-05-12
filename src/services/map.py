@@ -1,44 +1,82 @@
 from typing import List
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from fastapi import HTTPException, status
+from sqlalchemy.orm import selectinload
 
+from src.models import User
 from src.models.map import EcoPoint, Status, Review
 from src.schemas.map import (
     EcoPointCreate,
     EcoPointRead,
-    EcoPointUpdate,
     EcoPointStatusCreate,
-    EcoPointReviewCreate, EcoPointFilter
+    EcoPointReviewCreate,
+    EcoPointFilter,
+    EcoPointStatusRead,
+    EcoPointMostConfirmedStatusRead
 )
 
 
-async def create_ecopoint(
-    session: AsyncSession,
-    data: EcoPointCreate,
-    current_user_id: int
-) -> EcoPoint:
-    """Создание новой эко-точки"""
+async def create_ecopoint(session: AsyncSession, data: EcoPointCreate, current_user: User) -> EcoPoint:
+    """Создание новой эко-точки авторизованным пользователем"""
+
     new_point = EcoPoint(
-        **data.model_dump(),
-        created_by_id=current_user_id,
-        source="local"
+        name=data.name,
+        address=data.address,
+        latitude=data.latitude,
+        longitude=data.longitude,
+        type=data.type,
+        description=data.description,
+        working_hours=data.working_hours,
+        source="local",
+        created_by_id=current_user.id
     )
 
     session.add(new_point)
     await session.commit()
     await session.refresh(new_point)
+
     return new_point
 
 
-async def get_ecopoints_with_filters(
+async def get_most_confirmed_status(session: AsyncSession, ecopoint_id: int) -> EcoPointMostConfirmedStatusRead:
+    """Возвращает самый популярный статус точки (для списка/карты)"""
+
+    query = select(
+        Status.status,
+        func.count(Status.id).label("confirmed_by"),
+        func.max(Status.created_at).label("last_updated_at")
+    ).where(
+        Status.ecopoint_id == ecopoint_id
+    ).group_by(
+        Status.status
+    ).order_by(
+        func.count(Status.id).desc()
+    ).limit(1)
+
+    result = await session.execute(query)
+    row = result.first()
+
+    if not row:
+        return EcoPointMostConfirmedStatusRead(most_confirmed_status=None)
+
+    status_read = EcoPointStatusRead(
+        status=row.status,
+        confirmed_by=row.confirmed_by or 0,
+        last_updated_at=row.last_updated_at
+    )
+
+    return EcoPointMostConfirmedStatusRead(most_confirmed_status=status_read)
+
+
+async def get_ecopoints(
         session: AsyncSession,
         filters: EcoPointFilter,
         skip: int = 0,
         limit: int = 1000
 ) -> List[EcoPoint]:
-    """Use Case: просмотр точек на карте"""
+    """Просмотр точек на карте"""
 
     query = select(EcoPoint)
 
@@ -58,14 +96,24 @@ async def get_ecopoints_with_filters(
     query = query.offset(skip).limit(limit)
 
     result = await session.execute(query)
-    return list(result.scalars().all())
+    points = list(result.scalars().all())
+    for point in points:
+        most_status_wrapper = await get_most_confirmed_status(session, point.id)
+        point.most_confirmed_status = most_status_wrapper
+    return points
 
 
-async def get_ecopoint_by_id(session: AsyncSession, ecopoint_id: int) -> EcoPoint:
-    """Получить одну точку по ID"""
+async def get_ecopoint_detail(session: AsyncSession, ecopoint_id: int) -> EcoPoint:
+    """Получить полную информацию об одной эко-точке"""
     result = await session.execute(
-        select(EcoPoint).where(EcoPoint.id == ecopoint_id)
+        select(EcoPoint)
+        .options(
+            selectinload(EcoPoint.reviews),  # загружаем отзывы
+            selectinload(EcoPoint.statuses)  # загружаем все статусы
+        )
+        .where(EcoPoint.id == ecopoint_id)
     )
+
     point = result.scalar_one_or_none()
 
     if not point:
@@ -76,12 +124,7 @@ async def get_ecopoint_by_id(session: AsyncSession, ecopoint_id: int) -> EcoPoin
     return point
 
 
-async def create_status(
-    session: AsyncSession,
-    ecopoint_id: int,
-    status_data: EcoPointStatusCreate,
-    user_id: int
-):
+async def create_status(session: AsyncSession, ecopoint_id: int, status_data: EcoPointStatusCreate, user_id: int):
     """Пользователь ставит статус точки"""
     # Пока простая реализация (позже добавим ModerationRecord)
     new_status = Status(
@@ -96,12 +139,8 @@ async def create_status(
     return new_status
 
 
-async def create_review(
-    session: AsyncSession,
-    ecopoint_id: int,
-    review_data: EcoPointReviewCreate,
-    user_id: int
-) -> Review:
+async def create_review(session: AsyncSession, ecopoint_id: int, review_data: EcoPointReviewCreate, user_id: int) \
+        -> Review:
     """Создание отзыва к эко-точке"""
     new_review = Review(
         ecopoint_id=ecopoint_id,
