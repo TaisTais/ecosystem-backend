@@ -18,7 +18,7 @@ async def r_get_current_user(current_user: User = Depends(get_current_user_by_to
     return current_user
 
 
-@router.get("/moderations", response_model=List[ModerationRecordRead])
+@router.get("/moderations", summary="Посмотреть свои заявки на модерацию", response_model=List[ModerationRecordRead])
 async def r_get_my_moderations(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
