@@ -1,35 +1,10 @@
+from datetime import datetime, timezone
+from typing import Optional, List
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from fastapi import HTTPException, status
-
-from src.core.security import hash_password
-from src.models.users import User
-from src.schemas.users import UserCreate, UserRead, UserUpdate
-
-
-async def create_user(session: AsyncSession, user_data: UserCreate) -> User:
-    """Создание нового пользователя"""
-    result = await session.execute(
-        select(User).where(User.email == user_data.email)
-    )
-    if result.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Пользователь с таким email уже существует"
-        )
-
-    new_user = User(
-        name=user_data.name,
-        email=user_data.email,
-        role=user_data.role,
-        # hashed_password=...  # добавим позже
-    )
-
-    session.add(new_user)
-    await session.commit()
-    await session.refresh(new_user)
-
-    return new_user
+from src.models.users import User, UserRole
 
 
 async def get_user_by_id(session: AsyncSession, user_id: int) -> User:
@@ -47,42 +22,84 @@ async def get_user_by_id(session: AsyncSession, user_id: int) -> User:
     return user
 
 
-async def update_user(
+async def get_users_list(
     session: AsyncSession,
-    current_user: User,
-    data: UserUpdate
-) -> User:
-    """Обновление данных текущего пользователя"""
+    role: Optional[UserRole] = None,
+    skip: int = 0,
+    limit: int = 50,
+    is_public: bool = False   # новый флаг
+) -> List[User]:
+    """
+    Получить список пользователей.
+    - is_public=True → для обычных пользователей (только активные)
+    - is_public=False → для модераторов (все пользователи)
+    """
+    query = select(User).order_by(
+        User.experience_points.desc(),
+        User.created_at.desc()
+    )
+    if role is not None:
+        query = query.where(User.role == role)
+    if is_public:
+        query = query.where(User.is_blocked == False)
 
-    # Проверка уникальности email
-    if data.email is not None and data.email != current_user.email:
-        result = await session.execute(
-            select(User).where(User.email == data.email)
+    query = query.offset(skip).limit(limit)
+    result = await session.execute(query)
+    return list(result.scalars().all())
+
+
+async def block_user(session: AsyncSession, user_id: int, moderator: User, reason: Optional[str] = None) -> User:
+    """Заблокировать пользователя"""
+    result = await session.execute(
+        select(User).where(User.id == user_id)
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+    # Защита: модератор не может заблокировать другого модератора или админа
+    if user.role in [UserRole.MODERATOR, UserRole.ADMIN] and moderator.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Модератор не может блокировать других модераторов или администраторов"
         )
-        if result.scalar_one_or_none():
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Пользователь с таким email уже существует"
-            )
-        current_user.email = data.email
 
-    # Обновление обычных полей
-    if data.name is not None:
-        current_user.name = data.name
-
-    if data.description is not None:
-        current_user.description = data.description
-
-    # Обновление пароля (если передан)
-    if data.password is not None:
-        if len(data.password) < 6:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Пароль должен содержать минимум 6 символов"
-            )
-        current_user.hashed_password = hash_password(data.password)
+    user.is_blocked = True
+    user.blocked_at = datetime.now(timezone.utc)
+    user.block_reason = reason or "Заблокирован модератором"
 
     await session.commit()
-    await session.refresh(current_user)
+    await session.refresh(user)
 
-    return current_user
+    return user
+
+
+async def unblock_user(
+    session: AsyncSession,
+    user_id: int,
+    moderator: User
+) -> User:
+    """Разблокировать пользователя"""
+    result = await session.execute(
+        select(User).where(User.id == user_id)
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+    # Защита: модератор не может разблокировать модератора или админа
+    if user.role in [UserRole.MODERATOR, UserRole.ADMIN] and moderator.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Модератор не может разблокировать других модераторов или администраторов"
+        )
+
+    user.is_blocked = False
+    user.blocked_at = None
+    user.block_reason = None
+
+    await session.commit()
+    await session.refresh(user)
+    return user

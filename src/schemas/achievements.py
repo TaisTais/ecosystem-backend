@@ -2,7 +2,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
 
-from src.models.achievements import ActionType, ModerationStatus
+from src.models.achievements import ActionType
 
 
 class AchievementBase(BaseModel):
@@ -63,27 +63,3 @@ class UserAchievementRead(BaseModel):
 class UserAchievementList(BaseModel):
     """Список достижений пользователя"""
     achievements: List[UserAchievementRead]
-
-
-class ModerationRecordRead(BaseModel):
-    """Информация о модерации (для модератора и пользователя)"""
-    id: int
-    action_id: int
-    action_type: ActionType
-    user_id: int
-    user_name: Optional[str] = None
-    status: ModerationStatus
-    rejection_reason: Optional[str] = None
-    moderator_comment: Optional[str] = None
-    submitted_at: datetime
-    moderated_at: Optional[datetime] = None
-
-    class Config:
-        from_attributes = True
-
-
-class ModerationDecision(BaseModel):
-    """Решение модератора"""
-    status: ModerationStatus
-    rejection_reason: Optional[str] = None
-    moderator_comment: Optional[str] = None

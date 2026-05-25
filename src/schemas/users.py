@@ -6,12 +6,13 @@ from src.models.users import UserRole
 
 class UserBase(BaseModel):
     """Базовые поля пользователя"""
+    id: int
     name: str
     email: EmailStr
     role: UserRole
 
 
-class UserCreate(UserBase):
+class UserRegister(UserBase):
     """Схема для создания пользователя (регистрация)"""
     password: str
     role: UserRole = UserRole.CITIZEN
@@ -51,11 +52,51 @@ class TokenData(BaseModel):
 
 
 class UserRead(UserBase):
-    """Схема для возврата данных пользователю"""
+    """Полная информация о пользователе (для профиля)"""
+    is_blocked: bool
+    blocked_at: Optional[datetime] = None
+    block_reason: Optional[str] = None
+    created_at: datetime
+    experience_points: int
+    level: Optional[int] = None
+    description: Optional[str] = None
+    inn: Optional[str] = None   # только для организаций
+
+    class Config:
+        from_attributes = True
+
+
+class UserPublicRead(BaseModel):
+    """Публичная информация о пользователе (для всех авторизованных пользователей)"""
     id: int
-    level: Optional[int] = 1
-    experience_points: Optional[int] = 0
-    is_blocked: bool = False
+    name: str
+    role: UserRole
+    level: Optional[int] = None
+    experience_points: Optional[int] = None
+    description: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class UserPublicListRead(BaseModel):
+    """Публичная информация пользователя для списков (для всех)"""
+    id: int
+    name: str
+    role: UserRole
+    level: Optional[int] = None
+    experience_points: Optional[int] = None
+
+    class Config:
+        from_attributes = True
+
+
+class UserListRead(UserBase):
+    """Расширенная информация для модераторов и администраторов"""
+    is_blocked: bool
+    level: Optional[int] = None
+    experience_points: Optional[int] = None
     created_at: datetime
 
     class Config:
@@ -67,20 +108,7 @@ class UserUpdate(BaseModel):
     name: Optional[str] = None
     email: Optional[EmailStr] = None
     description: Optional[str] = None
-    password: Optional[str] = None          # новое поле
+    password: Optional[str] = None
 
     class Config:
         from_attributes = True
-
-
-class ModeratorCreate(BaseModel):
-    """Схема для создания модератора АДМИНОМ"""
-    name: str
-    email: EmailStr
-    password: str
-
-    @field_validator('email')
-    @classmethod
-    def email_must_be_unique(cls, v):
-        # Здесь можно добавить проверку, но обычно проверяем в сервисе
-        return v

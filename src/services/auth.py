@@ -3,11 +3,11 @@ from sqlalchemy import select
 from fastapi import HTTPException, status
 from datetime import datetime, timezone
 from src.models.users import User
-from src.schemas.users import UserCreate, UserLogin, Token
+from src.schemas.users import UserRegister, UserLogin, Token
 from src.core.security import hash_password, verify_password, create_access_token
 
 
-async def register_user(session: AsyncSession, user_data: UserCreate) -> User:
+async def register_user(session: AsyncSession, user_data: UserRegister) -> User:
     """Регистрация нового пользователя"""
 
     print(f"DEBUG: Registering user with email={user_data.email}, password length={len(user_data.password)}")

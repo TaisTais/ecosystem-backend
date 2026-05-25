@@ -1,6 +1,46 @@
-from sqlalchemy.ext.asyncio import AsyncSession
+from dotenv import load_dotenv
+import os
+
+from sqlalchemy.ext.asyncio import AsyncSession, async_session
+from src.database import async_session_maker
 from sqlalchemy import select
 from src.models.achievements import Achievement, ActionType
+from src.services.admin import create_admin
+from src.schemas.admin import AdminCreate
+from src.models.users import User, UserRole
+
+# Загружаем переменные окружения
+load_dotenv()
+
+
+async def create_default_admin(session: AsyncSession):
+    """Создаёт главного администратора"""
+
+    admin_email = os.getenv("ADMIN_EMAIL")
+    admin_password = os.getenv("ADMIN_PASSWORD")
+
+    if not admin_email or not admin_password:
+        print("❌ Не найдены ADMIN_EMAIL или ADMIN_PASSWORD в .env файле")
+        return
+
+    # Проверка, существует ли уже администратор
+    result = await session.execute(
+        select(User).where(User.role == UserRole.ADMIN).limit(1)
+    )
+    if result.scalar_one_or_none():
+        print("✅ Администратор уже существует в базе")
+        return
+
+    admin_data = AdminCreate(
+        name="Главный Администратор",
+        email=admin_email,
+        password=admin_password
+    )
+
+    admin = await create_admin(session, admin_data)
+    print(f"✅ Главный администратор успешно создан!")
+    print(f"   Email: {admin.email}")
+    print(f"   ID: {admin.id}")
 
 
 async def create_default_achievements(session: AsyncSession):
@@ -52,6 +92,15 @@ async def create_default_achievements(session: AsyncSession):
             is_cumulative=False
         ),
         Achievement(
+            name="Ваши изменения применены к эко-точке!",
+            description="Благодаря вам карта города стала ещё точнее",
+            icon="first_point.png",
+            points_reward=20,
+            action_type=ActionType.ADD_POINT,
+            required_count=1,
+            is_cumulative=False
+        ),
+        Achievement(
             name="Ваша точка добавлена!",
             description="Благодаря вам карта города стала ещё шире и доступнее",
             icon="first_point.png",
@@ -99,12 +148,13 @@ async def create_default_achievements(session: AsyncSession):
             required_count=1,
             is_cumulative=False
         ),
+
         Achievement(
             name="Первый след!",
-            description="Вы добавили свою первую эко-точку на карту",
+            description="Вы внесли первое изменение в карту и стали её соавтором!",
             icon="first_point.png",
             points_reward=30,
-            action_type=ActionType.ADD_POINT,
+            action_type=ActionType.ADD_POINT or ActionType.UPDATE_POINT,
             required_count=1,
             is_cumulative=False
         ),
@@ -166,6 +216,15 @@ async def create_default_achievements(session: AsyncSession):
             is_cumulative=True
         ),
         Achievement(
+            name="Орлиный глаз!",
+            description="Вы отредактировали 3 эко-точки на карте, спасибо за наблюдательность!",
+            badge_icon="badge_explorer.png",
+            points_reward=100,
+            action_type=ActionType.ADD_POINT,
+            required_count=5,
+            is_cumulative=True
+        ),
+        Achievement(
             name="Первопроходец Экосистемы!",
             description="Вы добавили 3 эко-точки на карту, благодарим настоящего знатока своего города!",
             badge_icon="badge_explorer.png",
@@ -199,3 +258,16 @@ async def create_default_achievements(session: AsyncSession):
 
     await session.commit()
     print(f"✅ Создано {len(achievements)} достижений")
+
+
+async def main():
+    async with async_session_maker() as session:
+        print("🚀 Запуск сидирования базы данных...")
+        await create_default_admin(session)
+        await create_default_achievements(session)
+        print("✅ Сидирование успешно завершено!")
+
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())

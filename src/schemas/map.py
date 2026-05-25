@@ -2,6 +2,7 @@ from pydantic import BaseModel, field_validator
 from typing import Optional, List
 from datetime import datetime
 
+from src.models.achievements import ActionType
 from src.models.map import SourceType, EcoPointStatus, EcoPointCategory
 
 
@@ -16,8 +17,11 @@ class EcoPointBase(BaseModel):
 
 # region СТАТУСЫ И ОТЗЫВЫ
 class EcoPointStatusCreate(BaseModel):
-    """Пользователь ставит статус точки (работает / закрыто)"""
+    """Поставить статус точке (житель)"""
     status: EcoPointStatus
+
+    class Config:
+        from_attributes = True
 
 
 class EcoPointStatusRead(BaseModel):
@@ -33,13 +37,16 @@ class EcoPointMostConfirmedStatusRead(BaseModel):
 
 
 class EcoPointReviewCreate(BaseModel):
-    """Создание отзыва"""
+    """Оставить отзыв (житель)"""
     comment: str
     photo_url: Optional[str] = None
 
+    class Config:
+        from_attributes = True
+
 
 class EcoPointReviewRead(BaseModel):
-    """Отзывы к эко-точке"""
+    """Посмотреть отзывы к эко-точке"""
     id: int
     user_id: int
     user_name: Optional[str] = None
@@ -54,7 +61,7 @@ class EcoPointReviewRead(BaseModel):
 
 
 class EcoPointCreate(EcoPointBase):
-    """Создание новой эко-точки (жителем)"""
+    """Создать эко-точку (житель)"""
     description: Optional[str] = None
     working_hours: Optional[str] = None
 
@@ -101,12 +108,38 @@ class EcoPointRead(EcoPointBase):
         from_attributes = True
 
 
-# class EcoPointUpdate(BaseModel):
-#     """Редактирование точки (модератором или создателем)"""
-#     name: Optional[str] = None
-#     address: Optional[str] = None
-#     latitude: Optional[float] = None
-#     longitude: Optional[float] = None
-#     description: Optional[str] = None
-#     working_hours: Optional[str] = None
-#     type: Optional[EcoPointCategory] = None
+class EcoPointUpdate(BaseModel):
+    """Запрос на обновление данных эко-точки (от жителя)"""
+    name: Optional[str] = None
+    address: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    type: Optional[EcoPointCategory] = None
+    description: Optional[str] = None
+    working_hours: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class VisitCreate(BaseModel):
+    """Пользователь отправляет посещение"""
+    ecopoint_id: int
+    proof_photo_url: str
+    visited_at: datetime
+    comment: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class VisitRead(BaseModel):
+    id: int
+    ecopoint_id: int
+    proof_photo_url: str
+    visited_at: datetime
+    created_at: datetime
+    comment: Optional[str] = None
+
+    class Config:
+        from_attributes = True

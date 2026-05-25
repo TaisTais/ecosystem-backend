@@ -88,7 +88,7 @@ class User(Base):
     )
     visits: Mapped[List["Visit"]] = relationship(
         "Visit",
-        back_populates="visiters",
+        back_populates="user",
         cascade="all, delete-orphan",
         lazy="selectin"
     )

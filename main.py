@@ -10,7 +10,8 @@ from src.routers.map import router as map_router
 from src.routers.feed import router as feed_router
 from src.routers.events import router as events_router
 from src.routers.auth import router as auth_router
-
+from src.routers.moderation import router as moderation_router
+from src.routers.profile import router as profile_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -43,6 +44,8 @@ app.include_router(map_router)
 app.include_router(feed_router)
 app.include_router(events_router)
 app.include_router(auth_router)
+app.include_router(moderation_router)
+app.include_router(profile_router)
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database import get_session
-from src.schemas.users import UserCreate, UserLogin, Token, UserRead
+from src.schemas.users import UserRegister, UserLogin, Token, UserRead
 from src.services.auth import register_user, authenticate_user
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -10,7 +10,7 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 
 @router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
 async def register(
-    user_data: UserCreate,
+    user_data: UserRegister,
     session: AsyncSession = Depends(get_session)
 ):
     """Регистрация нового пользователя"""

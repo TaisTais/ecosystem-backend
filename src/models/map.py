@@ -47,8 +47,8 @@ class EcoPoint(Base):
     working_hours: Mapped[Optional[str]] = mapped_column(String(100))
     description: Mapped[Optional[str]] = mapped_column(Text)
     needs_review: Mapped[bool] = mapped_column(default=False)
-    recyclemap_updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    last_local_update_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    recyclemap_updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    last_local_update_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     # Связи
     created_by: Mapped[Optional["User"]] = relationship(
@@ -80,9 +80,9 @@ class Status(Base):
     __tablename__ = "ecopoint_status"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     ecopoint_id: Mapped[int] = mapped_column(ForeignKey("ecopoint.id"), nullable=False)
-    author_id: Mapped[int] = mapped_column(ForeignKey("user.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("user.id"), nullable=False)
     status: Mapped[EcoPointStatus] = mapped_column(SQLEnum(EcoPointStatus), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     # Связи
     point: Mapped["EcoPoint"] = relationship(
@@ -100,10 +100,10 @@ class Review(Base):
     __tablename__ = "ecopoint_review"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     ecopoint_id: Mapped[int] = mapped_column(ForeignKey("ecopoint.id"), nullable=False)
-    author_id: Mapped[int] = mapped_column(ForeignKey("user.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("user.id"), nullable=False)
     comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     photo_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     # Связи
     point: Mapped["EcoPoint"] = relationship(
@@ -123,11 +123,13 @@ class Visit(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("user.id"), nullable=False)
     ecopoint_id: Mapped[int] = mapped_column(ForeignKey("ecopoint.id"), nullable=False)
-    visited_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now(timezone.utc))
+    visited_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     proof_photo_url: Mapped[str] = mapped_column(String(500), nullable=True)
+    comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Связи
-    visiters: Mapped["User"] = relationship(
+    user: Mapped["User"] = relationship(
         "User",
         back_populates="visits"
     )
