@@ -2,6 +2,7 @@ from pydantic import BaseModel, field_validator
 from typing import Optional, List
 from datetime import datetime
 
+from src.models import User
 from src.models.feed import PostType
 
 
@@ -11,6 +12,7 @@ class PostBase(BaseModel):
     content: str
     image_url: Optional[str] = None
     tags: Optional[List[str]] = None
+    event_id: Optional[int] = None
 
 
 class PostFilter(BaseModel):
@@ -18,17 +20,44 @@ class PostFilter(BaseModel):
     post_type: Optional[PostType] = None
     tag: Optional[str] = None
     author_id: Optional[int] = None
+    skip: int = 0
+    limit: int = 20
+    is_published: Optional[bool] = None
+
+    class Config:
+        extra = "forbid"
 
 
 class PostCreate(PostBase):
-    """Создание поста (пользователем, организацией или модератором)"""
+    """Создание поста"""
     post_type: PostType = PostType.POST
 
-    @field_validator('post_type')
+    @field_validator('event_id')
     @classmethod
-    def validate_post_type(cls, v: PostType) -> PostType:
-        # Можно добавить дополнительные ограничения по ролям позже
+    def validate_event_for_invite(cls, v, info):
+        post_type = info.data.get('post_type')
+        if post_type == PostType.EVENT_INVITE and not v:
+            raise ValueError('Для типа EVENT_INVITE обязательно нужно указать event_id')
         return v
+
+
+class PostCreateResponse(BaseModel):
+    """Ответ после создания поста"""
+    id: int
+    author_id: int
+    author_name: str
+    author_role: str
+    post_type: PostType
+    title: Optional[str] = None
+    content: str
+    image_url: Optional[str] = None
+    tags: Optional[List[str]] = None
+    event_id: Optional[int] = None
+    created_at: datetime
+    is_published: bool = True
+
+    class Config:
+        from_attributes = True
 
 
 class PostRead(PostBase):
@@ -38,6 +67,7 @@ class PostRead(PostBase):
     author_name: str
     author_role: str
     post_type: PostType
+    tags: Optional[List[str]] = None
     created_at: datetime
     is_published: bool = True
     likes_count: int = 0
@@ -45,6 +75,11 @@ class PostRead(PostBase):
 
     class Config:
         from_attributes = True
+
+
+class PostDetailRead(PostRead):
+    """Полная версия поста (детальная страница)"""
+    pass  # можно расширять
 
 
 class PostUpdate(BaseModel):
@@ -84,15 +119,16 @@ class PostWithComments(PostRead):
 # ====================== ЛАЙКИ ======================
 
 class PostLikeCreate(BaseModel):
-    """Техническая схема (обычно не используется напрямую)"""
+    """Техническая схема (лайк ставится по POST /feed/{post_id}/like)"""
     pass  # пользователь просто нажимает "лайк"
 
 
 class PostLikeRead(BaseModel):
-    """Информация о лайке (если нужно)"""
+    """Информация о лайке"""
     post_id: int
     liker_id: int
     created_at: datetime
+    likes_count: int
 
     class Config:
         from_attributes = True

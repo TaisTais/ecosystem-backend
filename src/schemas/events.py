@@ -135,3 +135,19 @@ class EventParticipantDetail(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ====================== КАЛЕНДАРЬ ======================
+class EventCalendarRead(BaseModel):
+    """Лёгкая версия для календаря"""
+    id: int
+    title: str
+    start_datetime: datetime
+    end_datetime: Optional[datetime] = None
+    is_online: bool
+    address: Optional[str] = None
+    organizer_name: str
+    participants_count: int = 0
+
+    class Config:
+        from_attributes = True

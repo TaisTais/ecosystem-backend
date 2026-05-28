@@ -1,4 +1,4 @@
-from sqlalchemy import String, Integer, DateTime, ForeignKey, Text, Boolean, UniqueConstraint
+from sqlalchemy import String, Integer, DateTime, ForeignKey, Text, Boolean, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 import enum
 from sqlalchemy import Enum as SQLEnum
@@ -6,8 +6,11 @@ from typing import Optional, List, TYPE_CHECKING
 from datetime import datetime, timezone
 
 from src.database import Base
+
 if TYPE_CHECKING:
+    from src.models.events import Event
     from src.models.complaints import Complaint
+    from src.models.users import User
 
 
 class PostType(str, enum.Enum):
@@ -27,8 +30,9 @@ class Post(Base):
     content: Mapped[str] = mapped_column(Text)
     image_url: Mapped[Optional[str]] = mapped_column(String(500))
     tags: Mapped[Optional[str]] = mapped_column(String(500))
+    event_id: Mapped[Optional[int]] = mapped_column(ForeignKey("event.id"), nullable=True, index=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     is_published: Mapped[bool] = mapped_column(Boolean, default=True)
 
     # Связи
@@ -52,8 +56,13 @@ class Post(Base):
     complaints: Mapped[List["Complaint"]] = relationship(
         "Complaint",
         foreign_keys="[Complaint.target_id]",
-        primaryjoin="and_(Complaint.target_id == Post.id, Complaint.target_type == 'post')",
+        primaryjoin="and_(Complaint.target_id == Post.id, Complaint.target_type == 'content')",
         back_populates="posts",
+        lazy="selectin"
+    )
+    event: Mapped[Optional["Event"]] = relationship(
+        "Event",
+        back_populates="invite_posts",
         lazy="selectin"
     )
 
@@ -73,7 +82,11 @@ class PostComment(Base):
     post_id: Mapped[int] = mapped_column(ForeignKey("post.id"), nullable=False)
     commentator_id: Mapped[int] = mapped_column(ForeignKey("user.id"), nullable=False)
     content: Mapped[str] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    deleted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    deleted_by: Mapped[Optional[int]] = mapped_column(ForeignKey("user.id"), nullable=True)
 
     # Связи
     post: Mapped["Post"] = relationship(
@@ -81,16 +94,25 @@ class PostComment(Base):
         back_populates="comments"
     )
     commentator: Mapped["User"] = relationship(
-        "User"
+        "User",
+        foreign_keys=[commentator_id],  # ← важно!
+        lazy="selectin"
+    )
+
+    deleted_by_user: Mapped[Optional["User"]] = relationship(
+        "User",
+        foreign_keys=[deleted_by],
+        lazy="selectin"
     )
 
 
 class PostLike(Base):
     """Лайки под постами"""
     __tablename__ = "post_like"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     post_id: Mapped[int] = mapped_column(ForeignKey("post.id"), primary_key=True)
     liker_id: Mapped[int] = mapped_column(ForeignKey("user.id"), primary_key=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     # Связи
     post: Mapped["Post"] = relationship(

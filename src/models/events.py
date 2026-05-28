@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from src.models.complaints import Complaint
     from src.models.users import User
+    from src.models.feed import Post
 
 
 class EventStatus(str, enum.Enum):
@@ -60,6 +61,11 @@ class Event(Base):
         lazy="selectin",
         viewonly=True,
         back_populates="events",
+    )
+    invite_posts: Mapped[List["Post"]] = relationship(
+        "Post",
+        back_populates="event",
+        lazy="selectin"
     )
 
     @property
