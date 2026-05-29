@@ -87,6 +87,13 @@ class EventDetail(EventRead):
     participants: List["EventParticipantRead"] = []
 
 
+class MyEventsRead(BaseModel):
+    """Мои события, разделённые по ролям"""
+    as_organizer: List[EventRead] = []
+    as_participant: List[EventRead] = []
+    as_applicant: List[EventRead] = []
+
+
 # ====================== ЗАПИСЬ НА МЕРОПРИЯТИЕ ======================
 
 class EventApplicantCreate(BaseModel):

@@ -29,12 +29,20 @@ class Event(Base):
     is_online: Mapped[bool] = mapped_column(Boolean, default=False)
     address: Mapped[Optional[str]] = mapped_column(String(300))
     meeting_link: Mapped[Optional[str]] = mapped_column(String(500))
+
     start_datetime: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     end_datetime: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
     status: Mapped[EventStatus] = mapped_column(SQLEnum(EventStatus), nullable=False, default=EventStatus.ACTIVE, index=True)
     max_participants: Mapped[Optional[int]] = mapped_column(Integer)
     tags: Mapped[Optional[str]] = mapped_column(String(500))
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now(timezone.utc))
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    is_published: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    deleted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    deleted_by: Mapped[Optional[int]] = mapped_column(ForeignKey("user.id"), nullable=True)
+    deleted_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Связи
     organizers: Mapped[List["User"]] = relationship(
@@ -65,6 +73,11 @@ class Event(Base):
     invite_posts: Mapped[List["Post"]] = relationship(
         "Post",
         back_populates="event",
+        lazy="selectin"
+    )
+    deleted_by_user: Mapped[Optional["User"]] = relationship(
+        "User",
+        foreign_keys=[deleted_by],
         lazy="selectin"
     )
 

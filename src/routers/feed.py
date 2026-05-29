@@ -13,7 +13,7 @@ from src.schemas.feed import (
 from src.services.feed import (
     create_post, get_posts_feed, get_post_detail,
     get_post_with_comments, update_post, delete_post, create_comment, toggle_like, toggle_post_publication,
-    delete_comment, get_my_posts
+    delete_comment, get_my_posts, get_deleted_posts
 )
 
 router = APIRouter(prefix="/feed", tags=["Лента"])
@@ -98,10 +98,22 @@ async def r_get_post_detail(
 @router.get("/{post_id}/full", response_model=PostWithComments, summary="Посмотреть комментарии")
 async def r_get_post_with_comments(
     post_id: int,
+    current_user: Optional[User] = Depends(get_current_user_by_token),
     session: AsyncSession = Depends(get_session)
 ):
     """Полная страница поста + комментарии"""
-    return await get_post_with_comments(session, post_id)
+    return await get_post_with_comments(session, post_id, current_user)
+
+
+@router.get("/moderation/deleted", response_model=List[PostRead], summary="Удалённые посты")
+async def r_get_deleted_posts(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=50),
+    current_user: User = Depends(get_current_moderator_or_admin),
+    session: AsyncSession = Depends(get_session)
+):
+    """Получить список всех удалённых постов (для модераторов|админов)"""
+    return await get_deleted_posts(session, skip, limit)
 
 
 @router.patch("/{post_id}/edit", response_model=PostRead, summary="Редактировать пост")

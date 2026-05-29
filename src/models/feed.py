@@ -35,6 +35,11 @@ class Post(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     is_published: Mapped[bool] = mapped_column(Boolean, default=True)
 
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    deleted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    deleted_by: Mapped[Optional[int]] = mapped_column(ForeignKey("user.id"), nullable=True)
+    deleted_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     # Связи
     author: Mapped["User"] = relationship(
         "User",
@@ -65,6 +70,11 @@ class Post(Base):
         back_populates="invite_posts",
         lazy="selectin"
     )
+    deleted_by_user: Mapped[Optional["User"]] = relationship(
+        "User",
+        foreign_keys=[deleted_by],
+        lazy="selectin"
+    )
 
     @property
     def likes_count(self) -> int:
@@ -87,6 +97,7 @@ class PostComment(Base):
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     deleted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     deleted_by: Mapped[Optional[int]] = mapped_column(ForeignKey("user.id"), nullable=True)
+    deleted_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Связи
     post: Mapped["Post"] = relationship(
@@ -98,7 +109,6 @@ class PostComment(Base):
         foreign_keys=[commentator_id],  # ← важно!
         lazy="selectin"
     )
-
     deleted_by_user: Mapped[Optional["User"]] = relationship(
         "User",
         foreign_keys=[deleted_by],

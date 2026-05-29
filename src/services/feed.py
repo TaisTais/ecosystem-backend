@@ -6,6 +6,7 @@ from sqlalchemy import select, desc, func
 from typing import List, Optional
 
 from sqlalchemy.orm import selectinload
+from sqlalchemy.sql.functions import current_user
 
 from src.models import User, Event
 from src.models.feed import Post, PostComment, PostType, PostLike
@@ -58,7 +59,8 @@ async def create_post(session: AsyncSession, data: PostCreate, current_user: Use
         image_url=data.image_url,
         tags=normalize_tags(data.tags),
         event_id=event_id,
-        is_published=True
+        is_published=data.is_published,
+        is_deleted=False
     )
 
     session.add(new_post)
@@ -68,20 +70,17 @@ async def create_post(session: AsyncSession, data: PostCreate, current_user: Use
     return new_post
 
 
-async def get_posts_feed(
-    session: AsyncSession,
-    filters: PostFilter
-) -> List[PostRead]:
+async def get_posts_feed(session: AsyncSession, filters: PostFilter) -> List[PostRead]:
     """Получить ленту постов"""
-
-    query = select(Post).where(Post.is_published == True)
+    query = select(Post).where(
+        Post.is_published == True,
+        Post.is_deleted == False
+    )
 
     if filters.post_type:
         query = query.where(Post.post_type == filters.post_type)
-
     if filters.tag:
         query = query.where(Post.tags.ilike(f"%{filters.tag}%"))
-
     if filters.author_id:
         query = query.where(Post.author_id == filters.author_id)
 
@@ -92,39 +91,26 @@ async def get_posts_feed(
     result = await session.execute(query)
     posts = result.scalars().all()
 
-    # Ручное формирование ответа
-    response = []
-    for post in posts:
-        # Сокращаем текст для ленты
-        content_preview = post.content
-        if len(content_preview) > 250:
-            content_preview = content_preview[:247] + "..."
-
-        active_comments_count = len([
-            c for c in post.comments if not getattr(c, 'is_deleted', False)
-        ])
-
-        response.append(PostRead(
-            id=post.id,
-            author_id=post.author_id,
-            author_name=post.author.name if post.author else "Неизвестно",
-            author_role=post.author.role.value if post.author else "unknown",
-            post_type=post.post_type,
-            title=post.title,
-            content=content_preview,
-            image_url=post.image_url,
-            tags=[tag.strip() for tag in post.tags.split(',')] if post.tags else [],
-            event_id=post.event_id,
-            created_at=post.created_at,
-            is_published=post.is_published,
-            likes_count=len(post.likes),
-            comments_count=active_comments_count
-        ))
-
-    return response
+    return [PostRead(
+        id=post.id,
+        author_id=post.author_id,
+        author_name=post.author.name if post.author else "Неизвестно",
+        author_role=post.author.role.value if post.author else "unknown",
+        post_type=post.post_type,
+        title=post.title,
+        content=post.content[:247] + "..." if len(post.content) > 250 else post.content,
+        image_url=post.image_url,
+        tags=[tag.strip() for tag in post.tags.split(',')] if post.tags else [],
+        event_id=post.event_id,
+        created_at=post.created_at,
+        is_published=post.is_published,
+        is_deleted=post.is_deleted,
+        likes_count=len(post.likes),
+        comments_count=len([c for c in post.comments if not getattr(c, 'is_deleted', False)])
+    ) for post in posts]
 
 
-async def get_post_by_id(session: AsyncSession, post_id: int,) -> Post:
+async def get_post_by_id(session: AsyncSession, post_id: int, current_user: Optional[User] = None) -> Post:
     """Внутренняя функция: получить SQLAlchemy объект поста"""
     query = select(Post).where(Post.id == post_id)
 
@@ -136,6 +122,25 @@ async def get_post_by_id(session: AsyncSession, post_id: int,) -> Post:
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Пост не найден"
         )
+
+    if post.is_deleted:
+        if current_user is None or (
+                post.author_id != current_user.id and
+                current_user.role not in ["moderator", "admin"]
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Пост не найден"
+            )
+
+    if not post.is_published:
+        if current_user is None or (
+                post.author_id != current_user.id
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Пост не найден"
+            )
     return post
 
 
@@ -159,12 +164,15 @@ async def get_post_detail(session: AsyncSession, post_id: int) -> PostDetailRead
         event_id=post.event_id,
         created_at=post.created_at,
         is_published=post.is_published,
+        is_deleted=post.is_deleted,
+        deleted_at=post.deleted_at,
+        deleted_reason=post.deleted_reason,
         likes_count=len(post.likes),
-        comments_count=len(post.comments)
+        comments_count=len([c for c in post.comments if not getattr(c, 'is_deleted', False)])
     )
 
 
-async def get_post_with_comments(session: AsyncSession, post_id: int) -> PostWithComments:
+async def get_post_with_comments(session: AsyncSession, post_id: int, current_user: Optional[User] = None) -> PostWithComments:
     """Получить пост + все комментарии (для детальной страницы)"""
     post = await get_post_by_id(session, post_id)
 
@@ -172,15 +180,18 @@ async def get_post_with_comments(session: AsyncSession, post_id: int) -> PostWit
     if not post.author:
         await session.refresh(post, ["author"])
 
-    # Загружаем комментарии
-    comments_result = await session.execute(
-        select(PostComment)
-        .where(
-            PostComment.post_id == post_id,
-            PostComment.is_deleted == False
+    can_see_deleted = False
+    if current_user:
+        can_see_deleted = (
+                post.author_id == current_user.id or
+                current_user.role in ["moderator", "admin"]
         )
-        .order_by(desc(PostComment.created_at))
-    )
+
+    query = select(PostComment).where(PostComment.post_id == post_id)
+    if not can_see_deleted:
+        query = query.where(PostComment.is_deleted == False)
+    query = query.order_by(desc(PostComment.created_at))
+    comments_result = await session.execute(query)
     comments = comments_result.scalars().all()
 
     # Ручное формирование ответа
@@ -197,8 +208,9 @@ async def get_post_with_comments(session: AsyncSession, post_id: int) -> PostWit
         event_id=post.event_id,
         created_at=post.created_at,
         is_published=post.is_published,
+        is_deleted=post.is_deleted,
         likes_count=len(post.likes),
-        comments_count=len(post.comments),
+        comments_count=len(comments),
         comments=[CommentRead.model_validate(c) for c in comments]
     )
 
@@ -243,10 +255,42 @@ async def get_my_posts(session: AsyncSession, current_user: User, filters: PostF
             event_id=post.event_id,
             created_at=post.created_at,
             is_published=post.is_published,
+            is_deleted=post.is_deleted,
             likes_count=len(post.likes),
             comments_count=len([c for c in post.comments if not getattr(c, 'is_deleted', False)])
         ))
 
+    return response
+
+
+async def get_deleted_posts(session: AsyncSession, skip: int = 0, limit: int = 20) -> List[PostRead]:
+    """Получить список удалённых постов (для модераторов)"""
+    query = select(Post).where(Post.is_deleted == True)
+    query = query.options(selectinload(Post.author))
+    query = query.order_by(desc(Post.deleted_at))
+    query = query.offset(skip).limit(limit)
+    result = await session.execute(query)
+    posts = result.scalars().all()
+
+    response = []
+    for post in posts:
+        response.append(PostRead(
+            id=post.id,
+            author_id=post.author_id,
+            author_name=post.author.name if post.author else "Неизвестно",
+            author_role=post.author.role.value if post.author else "unknown",
+            post_type=post.post_type,
+            title=post.title,
+            content=post.content[:247] + "..." if len(post.content) > 250 else post.content,
+            image_url=post.image_url,
+            tags=[tag.strip() for tag in post.tags.split(',')] if post.tags else [],
+            event_id=post.event_id,
+            created_at=post.created_at,
+            is_published=post.is_published,
+            is_deleted=post.is_deleted,
+            likes_count=len(post.likes),
+            comments_count=len([c for c in post.comments if not getattr(c, 'is_deleted', False)])
+        ))
     return response
 
 
@@ -289,6 +333,7 @@ async def update_post(session: AsyncSession, post_id: int, data: PostUpdate, cur
         event_id=post.event_id,
         created_at=post.created_at,
         is_published=post.is_published,
+        is_deleted=post.is_deleted,
         likes_count=len(post.likes),
         comments_count=len(post.comments)
     )
@@ -298,7 +343,7 @@ async def toggle_post_publication(session: AsyncSession, post_id: int, is_publis
     """Скрытие или публикация поста (автор + модератор/админ)"""
     post = await get_post_by_id(session, post_id)
 
-    if post.author_id != current_user.id and current_user.role not in ["moderator", "admin"]:
+    if post.author_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Нет прав для изменения статуса публикации"
@@ -322,14 +367,21 @@ async def toggle_post_publication(session: AsyncSession, post_id: int, is_publis
         event_id=post.event_id,
         created_at=post.created_at,
         is_published=post.is_published,
+        is_deleted=post.is_deleted,
         likes_count=len(post.likes),
         comments_count=len(post.comments)
     )
 
 
-async def delete_post(session: AsyncSession, post_id: int, current_user: User) -> dict:
-    """Удаление поста (автор или модератор/админ)"""
+async def delete_post(session: AsyncSession, post_id: int, current_user: User, reason: Optional[str] = None) -> dict:
+    """Мягкое удаление поста (автор или модератор/админ)"""
     post = await get_post_by_id(session, post_id)
+
+    if not post:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Пост не найден"
+        )
 
     # Проверка прав
     if post.author_id != current_user.id and current_user.role not in ["moderator", "admin"]:
@@ -338,10 +390,15 @@ async def delete_post(session: AsyncSession, post_id: int, current_user: User) -
             detail="Нет прав на удаление поста"
         )
 
-    await session.delete(post)
+    post.is_deleted = True
+    post.deleted_at = datetime.now(timezone.utc)
+    post.deleted_by = current_user.id
+    post.deleted_reason = reason
     await session.commit()
-
-    return {"message": "Пост успешно удалён"}
+    return {
+        "message": "Пост успешно удалён",
+        "post_id": post_id
+    }
 
 
 async def toggle_like(session: AsyncSession, post_id: int, current_user: User) -> dict:
@@ -425,7 +482,7 @@ async def create_comment(session: AsyncSession,  post_id: int,  data: CommentCre
     )
 
 
-async def delete_comment(session: AsyncSession, comment_id: int, current_user: User) -> dict:
+async def delete_comment(session: AsyncSession, comment_id: int, current_user: User, reason: Optional[str] = None) -> dict:
     """Удаление комментария (автор/модератор/админ)"""
 
     result = await session.execute(
@@ -436,7 +493,6 @@ async def delete_comment(session: AsyncSession, comment_id: int, current_user: U
     if not comment:
         raise HTTPException(status_code=404, detail="Комментарий не найден")
 
-    # Проверка прав
     if comment.commentator_id != current_user.id and current_user.role not in ["moderator", "admin"]:
         raise HTTPException(
             status_code=403,
@@ -446,8 +502,9 @@ async def delete_comment(session: AsyncSession, comment_id: int, current_user: U
     comment.is_deleted = True
     comment.deleted_at = datetime.now(timezone.utc)
     comment.deleted_by = current_user.id
+    comment.deleted_reason = reason
     await session.commit()
     return {
-        "message": "Комментарий успешно удалён",
+        "message": "Комментарий удалён",
         "comment_id": comment_id
     }

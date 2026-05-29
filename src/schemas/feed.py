@@ -31,6 +31,7 @@ class PostFilter(BaseModel):
 class PostCreate(PostBase):
     """Создание поста"""
     post_type: PostType = PostType.POST
+    is_published: bool = True
 
     @field_validator('event_id')
     @classmethod
@@ -70,6 +71,7 @@ class PostRead(PostBase):
     tags: Optional[List[str]] = None
     created_at: datetime
     is_published: bool = True
+    is_deleted: bool = False
     likes_count: int = 0
     comments_count: int = 0
 
@@ -79,7 +81,8 @@ class PostRead(PostBase):
 
 class PostDetailRead(PostRead):
     """Полная версия поста (детальная страница)"""
-    pass  # можно расширять
+    deleted_at: Optional[datetime] = None
+    deleted_reason: Optional[str] = None
 
 
 class PostUpdate(BaseModel):
@@ -106,6 +109,9 @@ class CommentRead(BaseModel):
     commentator_name: str
     content: str
     created_at: datetime
+    is_deleted: bool = False
+    deleted_at: datetime
+    deleted_reason: Optional[str] = None
 
     class Config:
         from_attributes = True
