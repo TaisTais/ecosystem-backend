@@ -6,14 +6,16 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import selectinload
 
 from src.models.events import Event, EventStatus, EventParticipant, EventApplicant
-from src.models.users import User
+from src.models.users import User, UserRole
 from src.schemas.events import (
     EventCreate, EventRead, EventCalendarRead,
-    EventFilter, EventUpdate, EventParticipantRead, EventParticipantCreate, EventApplicantRead, MyEventsRead
+    EventFilter, EventUpdate, EventParticipantRead, EventParticipantCreate, EventApplicantRead, MyEventsRead,
+    OrganizerInfo
 )
+from src.services.utils import normalize_tags
 
 
-async def create_event(session: AsyncSession, data: EventCreate, current_user: User) -> Event:
+async def create_event(session: AsyncSession, data: EventCreate, current_user: User) -> EventRead:
     """Создание нового мероприятия (организация или житель)"""
 
     new_event = Event(
@@ -25,15 +27,38 @@ async def create_event(session: AsyncSession, data: EventCreate, current_user: U
         address=data.address,
         meeting_link=data.meeting_link,
         max_participants=data.max_participants,
-        tags=",".join(data.tags) if data.tags else None,
+        tags=normalize_tags(data.tags),  # используем нормализацию как в постах
         status=EventStatus.ACTIVE
     )
 
+    # Добавляем организатора
     new_event.organizers.append(current_user)
+
     session.add(new_event)
     await session.commit()
     await session.refresh(new_event, ["organizers"])
-    return new_event
+
+    # Ручное формирование ответа
+    return EventRead(
+        id=new_event.id,
+        title=new_event.title,
+        description=new_event.description,
+        start_datetime=new_event.start_datetime,
+        end_datetime=new_event.end_datetime,
+        status=new_event.status,
+        is_online=new_event.is_online,
+        address=new_event.address,
+        meeting_link=new_event.meeting_link,
+        max_participants=new_event.max_participants,
+        tags=[tag.strip() for tag in new_event.tags.split(',')] if new_event.tags else [],
+        created_at=new_event.created_at,
+        organizer_id=current_user.id,
+        organizer_name=current_user.name,
+        organizer_role=current_user.role.value,
+        applicants_count=0,
+        participants_count=0,
+        is_user_applicant=False
+    )
 
 
 async def get_events_calendar(session: AsyncSession, filters: EventFilter) -> List[EventCalendarRead]:
@@ -47,8 +72,6 @@ async def get_events_calendar(session: AsyncSession, filters: EventFilter) -> Li
         query = query.where(Event.start_datetime <= filters.end_date)
     if filters.is_online is not None:
         query = query.where(Event.is_online == filters.is_online)
-    if filters.tag:
-        query = query.where(Event.tags.ilike(f"%{filters.tag}%"))
     if filters.status:
         query = query.where(Event.status == filters.status)
 
@@ -58,7 +81,21 @@ async def get_events_calendar(session: AsyncSession, filters: EventFilter) -> Li
 
     result = await session.execute(query)
     events = result.scalars().all()
-    return [EventCalendarRead.model_validate(event) for event in events]
+
+    response = []
+    for event in events:
+        response.append(EventCalendarRead(
+            id=event.id,
+            title=event.title,
+            start_datetime=event.start_datetime,
+            end_datetime=event.end_datetime,
+            is_online=event.is_online,
+            status=event.status,
+            max_participants=event.max_participants,
+            participants_count=len(event.participants),
+        ))
+
+    return response
 
 
 async def get_event_by_id(session: AsyncSession, event_id: int) -> Event:
@@ -120,10 +157,13 @@ async def update_event(session: AsyncSession, event_id: int, data: EventUpdate, 
     if not is_organizer:
         raise HTTPException(status_code=403, detail="Нет прав на редактирование")
 
-        # Проверка времени: нельзя менять дату/время события менее чем за 2 дня
-    if event.start_datetime:
+    changing_datetime = False
+    if data.start_datetime is not None or data.end_datetime is not None:
+        changing_datetime = True
+
+    if changing_datetime:
         days_until_event = (event.start_datetime - datetime.now(timezone.utc)).days
-        if days_until_event < 2 and (data.start_datetime or data.end_datetime):
+        if days_until_event < 2:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Изменять дату и время события можно не позднее чем за 2 дня до начала"
@@ -132,6 +172,8 @@ async def update_event(session: AsyncSession, event_id: int, data: EventUpdate, 
     update_data = data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         if value is not None:
+            if key == "tags":
+                value = normalize_tags(value)  # ← КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ
             setattr(event, key, value)
 
     await session.commit()
@@ -139,26 +181,37 @@ async def update_event(session: AsyncSession, event_id: int, data: EventUpdate, 
     return event
 
 
-async def delete_event(
-    session: AsyncSession,
-    event_id: int,
-    reason: str,
+async def delete_event(session: AsyncSession, event_id: int, reason: str, current_user: User) -> dict:
+    """Отмена (удаление) события"""
+    result = await session.execute(
+        select(Event).where(Event.id == event_id)
+    )
+    event = result.scalar_one_or_none()
 
-    current_user: User
-) -> Event:
-    """Отмена события"""
-    event = await get_event_by_id(session, event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Событие не найдено")
 
+    # Проверка прав
     is_organizer = any(org.id == current_user.id for org in event.organizers)
-    if not is_organizer and current_user.role not in ["moderator", "admin"]:
+    if not is_organizer and current_user.role not in [UserRole.MODERATOR, UserRole.ADMIN]:
         raise HTTPException(status_code=403, detail="Нет прав на отмену события")
 
+    # Мягкое удаление
     event.status = EventStatus.CANCELLED
-    # Можно добавить поле cancel_reason в модель, если нужно
+    event.is_deleted = True
+    event.deleted_at = datetime.now(timezone.utc)
+    event.deleted_by = current_user.id
+    if reason:
+        event.deleted_reason = reason
 
     await session.commit()
-    await session.refresh(event)
-    return event
+
+    return {
+        "success": True,
+        "message": "Событие успешно отменено",
+        "event_id": event_id,
+        "status": event.status.value
+    }
 
 
 async def apply_to_event(
@@ -188,7 +241,11 @@ async def apply_to_event(
     await session.commit()
     await session.refresh(application)
 
-    return EventApplicantRead.model_validate(application)
+    return EventApplicantRead(
+        user_id=current_user.id,
+        user_name=current_user.name,
+        applied_at=application.applied_at
+    )
 
 
 async def confirm_participation(
@@ -211,6 +268,15 @@ async def confirm_participation(
             detail="Вы не подавали заявку на это событие"
         )
 
+    existing = await session.execute(
+        select(EventParticipant).where(
+            EventParticipant.event_id == event_id,
+            EventParticipant.participant_id == current_user.id
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Вы уже подтвердили участие в этом событии")
+
     participation = EventParticipant(
         event_id=event_id,
         participant_id=current_user.id,
@@ -222,4 +288,8 @@ async def confirm_participation(
     await session.commit()
     await session.refresh(participation)
 
-    return EventParticipantRead.model_validate(participation)
+    return EventParticipantRead(
+        user_id=current_user.id,
+        user_name=current_user.name,
+        confirmed_at=participation.confirmed_at
+    )

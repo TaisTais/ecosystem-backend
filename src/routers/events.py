@@ -20,7 +20,7 @@ from src.services.events import (
 router = APIRouter(prefix="/events", tags=["События"])
 
 
-@router.post("/", response_model=EventRead, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=EventRead, status_code=status.HTTP_201_CREATED, summary="Создать событие")
 async def create_new_event(
     data: EventCreate,
     current_user: User = Depends(get_current_user_by_token),

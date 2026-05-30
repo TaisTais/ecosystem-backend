@@ -11,11 +11,11 @@ from src.services.admin import create_moderator
 router = APIRouter(prefix="/admin", tags=["Администратор"])
 
 
-@router.post("/moderators", response_model=UserRead, status_code=201)
+@router.post("/moderators", response_model=UserRead, status_code=201, summary="Создать модератора")
 async def create_moderator_endpoint(
     moderator_data: ModeratorCreate,
     current_user: User = Depends(get_current_admin),
     session: AsyncSession = Depends(get_session)
 ):
-    """Создать модератора (только администратор)"""
+    """Создать модератора (только админ)"""
     return await create_moderator(session, current_user, moderator_data)

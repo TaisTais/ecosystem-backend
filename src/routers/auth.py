@@ -8,7 +8,7 @@ from src.services.auth import register_user, authenticate_user
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
-@router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED, summary="Регистрация")
 async def register(
     user_data: UserRegister,
     session: AsyncSession = Depends(get_session)
@@ -17,7 +17,7 @@ async def register(
     return await register_user(session, user_data)
 
 
-@router.post("/login", response_model=Token)
+@router.post("/login", response_model=Token, summary="Войти")
 async def login(
     login_data: UserLogin,
     session: AsyncSession = Depends(get_session)

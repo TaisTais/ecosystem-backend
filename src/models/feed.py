@@ -43,6 +43,7 @@ class Post(Base):
     # Связи
     author: Mapped["User"] = relationship(
         "User",
+        foreign_keys=[author_id],
         back_populates="posts",
         lazy="selectin"
     )

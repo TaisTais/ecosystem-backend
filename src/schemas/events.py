@@ -23,8 +23,9 @@ class EventFilter(BaseModel):
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
     is_online: Optional[bool] = None
-    tag: Optional[str] = None
     status: Optional[EventStatus] = None
+    skip: int = 0
+    limit: int = 30
 
 
 class EventCreate(EventBase):
@@ -49,19 +50,32 @@ class EventCreate(EventBase):
         return v
 
 
+class OrganizerInfo(BaseModel):
+    """Информация об организаторе для отображения в календаре"""
+    id: int
+    name: str
+
+    class Config:
+        from_attributes = True
+
+
 class EventRead(EventBase):
     """Событие для отображения в календаре и общем списке"""
     id: int
-    organizer_id: int
-    organizer_name: str
-    organizer_role: str
     status: EventStatus = EventStatus.ACTIVE
-
+    organizers: List[OrganizerInfo] = []
     applicants_count: int = 0
     participants_count: int = 0
     is_user_applicant: bool = False
-
     created_at: datetime
+
+    @field_validator('tags', mode='before')
+    @classmethod
+    def parse_tags(cls, v):
+        """Преобразует строку из БД в список"""
+        if isinstance(v, str):
+            return [tag.strip() for tag in v.split(',') if tag.strip()]
+        return v or []
 
     class Config:
         from_attributes = True
@@ -105,7 +119,7 @@ class EventApplicantRead(BaseModel):
     """Информация о записавшемся"""
     user_id: int
     user_name: str
-    registered_at: datetime
+    applied_at: datetime
 
     class Config:
         from_attributes = True
@@ -123,7 +137,7 @@ class EventParticipantRead(BaseModel):
     """Публичная информация об участнике (для всех пользователей)"""
     user_id: int
     user_name: str
-    registered_at: datetime
+    confirmed_at: datetime
 
     class Config:
         from_attributes = True
@@ -152,8 +166,8 @@ class EventCalendarRead(BaseModel):
     start_datetime: datetime
     end_datetime: Optional[datetime] = None
     is_online: bool
-    address: Optional[str] = None
-    organizer_name: str
+    status: Optional[EventStatus] = "active"
+    max_participants: Optional[int] = None
     participants_count: int = 0
 
     class Config:

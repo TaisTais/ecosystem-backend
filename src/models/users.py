@@ -50,6 +50,7 @@ class User(Base):
     # Связи
     posts: Mapped[List["Post"]] = relationship(
         "Post",
+        foreign_keys="[Post.author_id]",
         back_populates="author",
         lazy="selectin"
     )
