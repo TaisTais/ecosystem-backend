@@ -4,16 +4,16 @@ from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException, status
 from sqlalchemy import select, update
+from sqlalchemy.orm import selectinload
 
 from src.models.achievements import ActionType
 from src.models.moderation import ModerationRecord, ModerationStatus
 from src.models.users import User
 from src.models.map import EcoPoint, Visit
-from src.schemas.moderation import ModerationDecisionRead, ModerationDecisionCreate
+from src.schemas.moderation import ModerationDecisionRead, ModerationDecisionCreate, ModerationRecordDetailRead
 from src.services.achievements import award_achievement
 
 
-# region
 async def apply_add_point(session: AsyncSession, mod: ModerationRecord) -> EcoPoint:
     """Применить создание новой эко-точки"""
     if not mod.new_data:

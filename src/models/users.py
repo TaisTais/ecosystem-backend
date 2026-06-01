@@ -33,7 +33,10 @@ class User(Base):
     # Общие поля
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     is_blocked: Mapped[bool] = mapped_column(default=False)
-    blocked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    blocked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now()
+    )
     block_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

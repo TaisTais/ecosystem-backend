@@ -89,7 +89,6 @@ async def unblock_user(
     if not user:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
 
-    # Защита: модератор не может разблокировать модератора или админа
     if user.role in [UserRole.MODERATOR, UserRole.ADMIN] and moderator.role != UserRole.ADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

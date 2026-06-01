@@ -1,9 +1,14 @@
+from typing import List
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException, status
+from sqlalchemy.orm import selectinload
 
 from src.core.security import hash_password
-from src.models.users import User
+from src.models import ModerationRecord
+from src.models.users import User, UserRole
+from src.schemas.moderation import ModerationRecordDetailRead
 from src.schemas.users import UserUpdate
 from src.services.moderation import get_moderations_by_user_id
 
@@ -21,6 +26,25 @@ async def get_my_moderations(
         skip=skip,
         limit=limit
     )
+
+
+async def get_my_moderation_actions(
+    session: AsyncSession,
+    current_moderator: User,
+    skip: int = 0,
+    limit: int = 50
+) -> List[ModerationRecordDetailRead]:
+    """Посмотреть свои действия по модерации"""
+    result = await session.execute(
+        select(ModerationRecord)
+        .where(ModerationRecord.moderator_id == current_moderator.id)
+        .order_by(ModerationRecord.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .options(selectinload(ModerationRecord.user))   # для user_name
+    )
+    actions = result.scalars().all()
+    return [ModerationRecordDetailRead.model_validate(action) for action in actions]
 
 
 async def update_current_user(
@@ -46,8 +70,17 @@ async def update_current_user(
     if data.name is not None:
         current_user.name = data.name
 
-    if data.description is not None:
-        current_user.description = data.description
+    if current_user.role == UserRole.ORGANIZATION:
+        if data.description is not None:
+            current_user.description = data.description
+        if data.inn is not None:
+            current_user.inn = data.inn
+    else:
+        if data.description is not None or data.inn is not None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Поля description и inn доступны только для организаций"
+            )
 
     # Обновление пароля (если передан)
     if data.password is not None:

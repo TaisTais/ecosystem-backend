@@ -2,17 +2,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from fastapi import HTTPException, status
 from datetime import datetime, timezone
-from src.models.users import User
-from src.schemas.users import UserRegister, UserLogin, Token
+from src.models.users import User, UserRole
+from src.schemas.auth import RegistrationRole, Token, UserRegister, UserLogin
 from src.core.security import hash_password, verify_password, create_access_token
 
 
 async def register_user(session: AsyncSession, user_data: UserRegister) -> User:
     """Регистрация нового пользователя"""
 
-    print(f"DEBUG: Registering user with email={user_data.email}, password length={len(user_data.password)}")
+    if user_data.role not in {RegistrationRole.CITIZEN, RegistrationRole.ORGANIZATION}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="При регистрации доступны только роли citizen и organization"
+        )
 
-    # Проверка существования
     result = await session.execute(
         select(User).where(User.email == user_data.email)
     )
@@ -21,14 +24,16 @@ async def register_user(session: AsyncSession, user_data: UserRegister) -> User:
 
     # Хэширование
     hashed_password = hash_password(user_data.password)
-    print(f"DEBUG: Password hashed successfully, length of hash = {len(hashed_password)}")
 
     new_user = User(
         name=user_data.name,
         email=user_data.email,
         hashed_password=hashed_password,
-        role=user_data.role,
-        experience_points=0,
+        role=UserRole(user_data.role),
+
+        experience_points=0, # для citizen
+        description=None,  # для organization
+        inn=None,  # для organization
         created_at=datetime.now(timezone.utc)
     )
 

@@ -2,12 +2,12 @@ from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
-from src.core.dependencies import get_current_user_by_token, get_current_citizen
+from src.core.dependencies import get_current_user_by_token, get_current_citizen, get_current_moderator
 from src.database import get_session
 from src.models.users import User
-from src.schemas.moderation import ModerationRecordRead
+from src.schemas.moderation import ModerationRecordRead, ModerationRecordDetailRead
 from src.schemas.users import UserRead, UserUpdate
-from src.services.profile import update_current_user, get_my_moderations
+from src.services.profile import update_current_user, get_my_moderations, get_my_moderation_actions
 
 router = APIRouter(prefix="/me", tags=["Профиль"])
 
@@ -29,6 +29,22 @@ async def r_get_my_moderations(
     return await get_my_moderations(
         session=session,
         current_user=current_user,
+        skip=skip,
+        limit=limit
+    )
+
+
+@router.get("/moderation-actions", response_model=List[ModerationRecordDetailRead], summary="Мои действия по модерации (для модераторов)")
+async def get_my_moderation_actions_endpoint(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+    current_user: User = Depends(get_current_moderator),
+    session: AsyncSession = Depends(get_session)
+):
+    """Модератор смотрит историю своих модераций"""
+    return await get_my_moderation_actions(
+        session=session,
+        current_moderator=current_user,
         skip=skip,
         limit=limit
     )
