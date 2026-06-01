@@ -4,11 +4,12 @@ from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from fastapi import HTTPException, status
+from sqlalchemy.orm import selectinload
 
 from src.core.security import hash_password
 from src.models import ModerationRecord
 from src.models.users import User, UserRole
-from src.schemas.admin import ModeratorCreate, AdminCreate
+from src.schemas.admin import ModeratorCreate, AdminCreate, ModeratorActionRead, ModeratorActionDetailRead
 
 
 async def create_admin(session: AsyncSession, data: AdminCreate) -> User:
@@ -71,12 +72,12 @@ async def create_moderator(session: AsyncSession, admin: User, data: ModeratorCr
     return moderator
 
 
-async def get_all_moderators_with_stats(
+async def get_all_moderators(
     session: AsyncSession,
     admin: User,
     skip: int = 0,
     limit: int = 50
-) -> List[dict]:
+) -> List[ModeratorActionRead]:
     """Получить всех модераторов + статистику их модераций (для админа)"""
 
     if admin.role != UserRole.ADMIN:
@@ -84,6 +85,8 @@ async def get_all_moderators_with_stats(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Эти данные может получить только администратор"
         )
+
+    # Получаем модераторов
     result = await session.execute(
         select(User)
         .where(User.role == UserRole.MODERATOR)
@@ -94,22 +97,78 @@ async def get_all_moderators_with_stats(
 
     response = []
     for mod in moderators:
-        mod_actions = await session.execute(
+        actions_count_query = await session.execute(
             select(func.count(ModerationRecord.id))
             .where(ModerationRecord.moderator_id == mod.id)
         )
-        actions_count = mod_actions.scalar() or 0
+        actions_count = actions_count_query.scalar() or 0
 
-        response.append({
-            "id": mod.id,
-            "name": mod.name,
-            "email": mod.email,
-            "is_blocked": mod.is_blocked,
-            "created_at": mod.created_at,
-            "actions_count": actions_count
-        })
+        response.append(ModeratorActionRead(
+            id=mod.id,
+            name=mod.name,
+            email=mod.email,
+            is_blocked=mod.is_blocked,
+            created_at=mod.created_at,
+            actions_count=actions_count
+        ))
 
     return response
+
+
+async def get_moderator_detail(
+    session: AsyncSession,
+    admin: User,
+    moderator_id: int,
+    skip: int = 0,
+    limit: int = 100
+) -> List[ModeratorActionDetailRead]:
+    """Админ получает полную историю действий конкретного модератора"""
+    if admin.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Эти данные может получить только администратор"
+        )
+
+    mod_result = await session.execute(
+        select(User).where(User.id == moderator_id, User.role == UserRole.MODERATOR)
+    )
+    moderator = mod_result.scalar_one_or_none()
+    if not moderator:
+        raise HTTPException(
+            status_code=404,
+            detail="Модератор с таким id не найден"
+        )
+
+    result = await session.execute(
+        select(ModerationRecord)
+        .where(ModerationRecord.moderator_id == moderator_id)
+        .order_by(ModerationRecord.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .options(
+            selectinload(ModerationRecord.user),      # для user_name
+            selectinload(ModerationRecord.moderator)  # на всякий случай
+        )
+    )
+
+    actions = result.scalars().all()
+
+    return [
+        ModeratorActionDetailRead(
+            id=action.id,
+            action_type=action.action_type,
+            action_id=action.action_id,
+            user_id=action.user_id,
+            user_name=action.user.name if action.user else None,
+            status=action.status,
+            created_at=action.created_at,
+            moderated_at=action.moderated_at,
+            moderator_comment=action.moderator_comment,
+            old_data=action.old_data,
+            new_data=action.new_data,
+        )
+        for action in actions
+    ]
 
 
 async def block_moderator(
