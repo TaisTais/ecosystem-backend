@@ -1,4 +1,4 @@
-from sqlalchemy import Integer, DateTime, ForeignKey, Text, and_, literal_column
+from sqlalchemy import Integer, DateTime, ForeignKey, Text, and_, literal_column, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship, foreign, remote
 import enum
 from sqlalchemy import Enum as SQLEnum
@@ -12,12 +12,14 @@ if TYPE_CHECKING:
     from src.models.events import Event
     from src.models.users import User
     from src.models.feed import Post
+    from src.models.feed import PostComment
 
 
 class TargetType(str, enum.Enum):
     CONTENT = "content"
     EVENT = "event"
     USER = "user"
+    COMMENT = "comment"
 
 
 class ComplaintStatus(str, enum.Enum):
@@ -34,11 +36,17 @@ class Complaint(Base):
     target_type: Mapped[TargetType] = mapped_column(SQLEnum(TargetType), nullable=False, index=True)
     target_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     comment: Mapped[Optional[str]] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now()
+    )
     status: Mapped[ComplaintStatus] = mapped_column(SQLEnum(ComplaintStatus), default="pending", index=True)
     moderator_id: Mapped[Optional[int]] = mapped_column(ForeignKey("user.id"), nullable=True)
-    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    moderator_response: Mapped[str] = mapped_column(Text)
+    moderated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now()
+    )
+    moderator_response: Mapped[str] = mapped_column(Text, nullable=True)
 
     # Связи
     complainant: Mapped["User"] = relationship(
@@ -57,7 +65,6 @@ class Complaint(Base):
         uselist=False,
         viewonly=True,
     )
-
     posts: Mapped[Optional["Post"]] = relationship(
         "Post",
         primaryjoin="and_(Post.id == foreign(Complaint.target_id), Complaint.target_type == 'post')",
@@ -65,7 +72,13 @@ class Complaint(Base):
         uselist=False,
         viewonly=True
     )
-
+    comments: Mapped[Optional["PostComment"]] = relationship(
+        "PostComment",
+        primaryjoin="and_(PostComment.id == foreign(Complaint.target_id), Complaint.target_type == 'comment')",
+        back_populates="complaints",
+        uselist=False,
+        viewonly=True
+    )
     events: Mapped[Optional["Event"]] = relationship(
         "Event",
         primaryjoin="and_(Event.id == foreign(Complaint.target_id), Complaint.target_type == 'event')",

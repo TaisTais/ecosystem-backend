@@ -115,6 +115,13 @@ class PostComment(Base):
         foreign_keys=[deleted_by],
         lazy="selectin"
     )
+    complaints: Mapped[List["Complaint"]] = relationship(
+        "Complaint",
+        foreign_keys="[Complaint.target_id]",
+        primaryjoin="and_(Complaint.target_id == PostComment.id, Complaint.target_type == 'comment')",
+        back_populates="comments",
+        lazy="selectin"
+    )
 
 
 class PostLike(Base):

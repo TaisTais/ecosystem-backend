@@ -1,13 +1,14 @@
 from typing import List
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException, status
 from sqlalchemy.orm import selectinload
 
 from src.core.security import hash_password
-from src.models import ModerationRecord
+from src.models import ModerationRecord, User, Complaint
 from src.models.users import User, UserRole
+from src.schemas.complaints import ComplaintList, ComplaintRead
 from src.schemas.moderation import ModerationRecordDetailRead
 from src.schemas.users import UserUpdate
 from src.services.moderation import get_moderations_by_user_id
@@ -94,3 +95,28 @@ async def update_current_user(
     await session.commit()
     await session.refresh(current_user)
     return current_user
+
+
+async def get_my_complaints(
+    session: AsyncSession,
+    current_user: User,
+    skip: int = 0,
+    limit: int = 20
+) -> ComplaintList:
+    """Пользователь смотрит свои жалобы"""
+
+    query = select(Complaint).where(Complaint.complainant_id == current_user.id)
+
+    total = await session.execute(
+        select(func.count()).select_from(Complaint).where(Complaint.complainant_id == current_user.id)
+    )
+    total = total.scalar() or 0
+
+    query = query.order_by(Complaint.created_at.desc()).offset(skip).limit(limit)
+    result = await session.execute(query)
+    complaints = result.scalars().all()
+
+    return ComplaintList(
+        complaints=[ComplaintRead.model_validate(c) for c in complaints],
+        total=total
+    )

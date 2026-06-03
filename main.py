@@ -13,6 +13,7 @@ from src.routers.auth import router as auth_router
 from src.routers.moderation import router as moderation_router
 from src.routers.profile import router as profile_router
 from src.routers.admin import router as admin_router
+from src.routers.complaints import router as complaint_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -48,6 +49,7 @@ app.include_router(feed_router)
 app.include_router(events_router)
 app.include_router(admin_router)
 app.include_router(moderation_router)
+app.include_router(complaint_router)
 
 
 if __name__ == "__main__":

@@ -22,12 +22,17 @@ class ComplaintRead(ComplaintBase):
     """Информация о жалобе (для пользователя и модератора)"""
     id: int
     complainant_id: int
-    complainant_name: Optional[str] = None
     status: ComplaintStatus
+
+    class Config:
+        from_attributes = True
+
+
+class ComplaintDetailRead(ComplaintRead):
+    """Информация о жалобе (для пользователя и модератора)"""
     created_at: datetime
-    reviewed_at: Optional[datetime] = None
+    moderated_at: Optional[datetime] = None
     moderator_id: Optional[int] = None
-    moderator_name: Optional[str] = None
     moderator_response: Optional[str] = None
 
     class Config:
@@ -44,11 +49,3 @@ class ComplaintList(BaseModel):
     """Список жалоб (для модератора)"""
     complaints: List[ComplaintRead]
     total: int
-
-
-class ComplaintStats(BaseModel):
-    """Статистика жалоб (для админки)"""
-    total_complaints: int
-    pending: int
-    approved: int
-    rejected: int
